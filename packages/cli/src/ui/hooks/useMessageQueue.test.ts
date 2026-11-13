@@ -1079,6 +1079,57 @@ describe('useMessageQueue', () => {
       expect(result.current.messageQueue).toEqual(['/model']);
     });
 
+    it('leaves a queued ?btw side question out of the mid-turn steer drain', () => {
+      const { result } = renderHook(() => useMessageQueue());
+
+      act(() => {
+        result.current.addMessage('steer now');
+        result.current.addMessage('?btw what is a closure');
+        result.current.addMessage('/model');
+        result.current.addMessage('? not a command');
+      });
+
+      let drained: string[] = [];
+      act(() => {
+        drained = result.current.drainQueue();
+      });
+
+      expect(drained).toEqual(['steer now', '? not a command']);
+      expect(result.current.messageQueue).toEqual([
+        '?btw what is a closure',
+        '/model',
+      ]);
+    });
+
+    it('pops a queued ?btw side question on its own, like a slash command', () => {
+      const { result } = renderHook(() => useMessageQueue());
+
+      act(() => {
+        result.current.addMessage('hello');
+        result.current.addMessage('?btw what is a closure');
+        result.current.addMessage('? not a command');
+      });
+
+      let first: ReturnType<typeof result.current.popNextSubmission> = null;
+      act(() => {
+        first = result.current.popNextSubmission();
+      });
+      expect(first).toMatchObject({
+        kind: 'user',
+        modelText: 'hello\n\n? not a command',
+      });
+
+      let second: ReturnType<typeof result.current.popNextSubmission> = null;
+      act(() => {
+        second = result.current.popNextSubmission();
+      });
+      expect(second).toMatchObject({
+        kind: 'user',
+        modelText: '?btw what is a closure',
+      });
+      expect(result.current.messageQueue).toEqual([]);
+    });
+
     it('keeps Goal creation queued until an ordinary turn reaches idle', () => {
       const { result } = renderHook(() => useMessageQueue());
 

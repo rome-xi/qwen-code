@@ -2116,7 +2116,8 @@ export const useLlmStream = (
 
         onDebugMessage(`Received user query (${trimmedQuery.length} chars)`);
         // Handle UI-only commands first
-        const isSlash = isSlashCommand(trimmedQuery);
+        const isSlash =
+          isSlashCommand(trimmedQuery) || isBtwCommand(trimmedQuery);
         // One-shot notices the TUI folded into this prompt stay on the model
         // side only: the recall log, the transcript row and the cancel-restore
         // buffer use the composer's projection (#11553), since reverse-parsing
@@ -4366,7 +4367,7 @@ export const useLlmStream = (
         (submitType === SendMessageType.UserQuery ||
           submitType === SendMessageType.Cron) &&
         typeof query === 'string' &&
-        isSlashCommand(query.trim());
+        (isSlashCommand(query.trim()) || isBtwCommand(query));
       // Whether the Mods started. When they failed, the prompt is refused
       // with the reason, and the caller releases what it holds.
       const modsStarted = async (): Promise<boolean> => {

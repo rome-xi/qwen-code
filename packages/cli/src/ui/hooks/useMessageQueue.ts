@@ -13,7 +13,7 @@ import type {
 } from '@qwen-code/qwen-code-core';
 import type { HumanPromptInput } from '@qwen-code/qwen-code-core/core/workflow-intent.js';
 import { restorePasteDraft } from '../utils/paste-placeholders.js';
-import { isSlashCommand } from '../utils/commandUtils.js';
+import { isBtwCommand, isSlashCommand } from '../utils/commandUtils.js';
 import type { PeerQueuedDelivery } from '../../peerMessaging/peer-messaging.js';
 
 export interface QueuedGoalTurn extends GoalContinuationTurn {
@@ -152,6 +152,9 @@ interface QueuedMessage {
 }
 
 export const GOAL_COMMAND_RE = /^\/goal(?:\s|$)/;
+
+const isQueuedCommand = (text: string): boolean =>
+  isSlashCommand(text) || isBtwCommand(text);
 
 function aggregateUserMessages(
   messages: readonly QueuedMessage[],
@@ -296,7 +299,7 @@ export function useMessageQueue(): UseMessageQueueReturn {
     (goalTurnActive = false) =>
       goalTurnActive
         ? undefined
-        : queueRef.current.find(({ text }) => !isSlashCommand(text))?.key,
+        : queueRef.current.find(({ text }) => !isQueuedCommand(text))?.key,
     [],
   );
   const hasQueuedUserMessages = useCallback(
@@ -377,7 +380,7 @@ export function useMessageQueue(): UseMessageQueueReturn {
       }
 
       const plainMessages = queueRef.current.filter(
-        ({ text, peer }) => !isSlashCommand(text) && !peer,
+        ({ text, peer }) => !isQueuedCommand(text) && !peer,
       );
       if (plainMessages.length > 0) {
         // One routing decision per batch: the batch is the contiguous run of
@@ -510,7 +513,7 @@ export function useMessageQueue(): UseMessageQueueReturn {
       const shouldDrain = (message: QueuedMessage) =>
         (goalTurnActive
           ? GOAL_COMMAND_RE.test(message.text)
-          : !isSlashCommand(message.text)) &&
+          : !isQueuedCommand(message.text)) &&
         (includeDeferred || !message.deferUntilIdle);
       const drained = current.filter(shouldDrain);
       if (drained.length === 0) return [];

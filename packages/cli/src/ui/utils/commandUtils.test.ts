@@ -1302,10 +1302,10 @@ describe('consumesContextAnnouncementLatch', () => {
     ).toBe(false);
   });
 
-  it('consumes ?btw (not a slash command, goes to the main model)', () => {
+  it('rejects ?btw side-questions (same fork as /btw, no main turn)', () => {
     expect(
       consumesContextAnnouncementLatch('?btw side note', options(false)),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects local slash commands (no model turn)', () => {

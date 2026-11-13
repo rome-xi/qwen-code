@@ -3470,7 +3470,8 @@ export const AppContainer = (props: AppContainerProps) => {
       if (
         worktreeNotice &&
         !shellModeActive &&
-        !isSlashCommand(submittedValue)
+        !isSlashCommand(submittedValue) &&
+        !isBtwCommand(submittedValue)
       ) {
         pendingWorktreeNoticeRef.current = null;
         submittedValue =
@@ -3680,7 +3681,7 @@ export const AppContainer = (props: AppContainerProps) => {
       if (
         streamingState === StreamingState.Idle &&
         !isProcessing &&
-        isSlashCommand(submittedValue)
+        (isSlashCommand(submittedValue) || isBtwCommand(submittedValue))
       ) {
         void Promise.resolve(
           submitQuery(submittedValue, SendMessageType.UserQuery, undefined, {

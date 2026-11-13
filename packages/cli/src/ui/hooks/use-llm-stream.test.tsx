@@ -17198,6 +17198,48 @@ describe('useLlmStream', () => {
       });
     });
 
+    it('routes a ?btw side question through the slash handler', async () => {
+      mockHandleSlashCommand.mockResolvedValue({ type: 'handled' });
+      const { result, mockSendMessageStream: localMockSendMessageStream } =
+        renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('?btw what is a closure');
+      });
+
+      await waitFor(() => {
+        expect(mockHandleSlashCommand).toHaveBeenCalledWith(
+          '?btw what is a closure',
+          undefined,
+          undefined,
+          undefined,
+          'test-session-id########5',
+          expect.any(Function),
+          expect.any(AbortSignal),
+        );
+      });
+      expect(localMockSendMessageStream).not.toHaveBeenCalled();
+    });
+
+    it('does not route other question-mark prompts through the slash handler', async () => {
+      const { result, mockSendMessageStream: localMockSendMessageStream } =
+        renderTestHook();
+
+      await act(async () => {
+        await result.current.submitQuery('? what is a closure');
+      });
+
+      await waitFor(() => {
+        expect(mockHandleSlashCommand).not.toHaveBeenCalled();
+        expect(localMockSendMessageStream).toHaveBeenCalledWith(
+          '? what is a closure',
+          expect.any(AbortSignal),
+          expect.any(String),
+          expect.objectContaining({ type: SendMessageType.UserQuery }),
+        );
+      });
+    });
+
     describe('inline model override', () => {
       // Make the active provider expose `inline-model` so the consumer-side
       // provider-identity validation accepts the override.
@@ -23031,7 +23073,7 @@ describe('useLlmStream', () => {
       }
     });
 
-    it('should preserve the legacy model path for ?btw during a main response', async () => {
+    it('routes ?btw through the slash handler during a main response and falls through when the handler declines', async () => {
       const btwQuery = '?btw quick side question';
       let resolveFirstCall!: () => void;
       let mainAbortSignal: AbortSignal | undefined;
@@ -23089,7 +23131,15 @@ describe('useLlmStream', () => {
           );
         });
 
-        expect(mockHandleSlashCommand).not.toHaveBeenCalledWith(btwQuery);
+        expect(mockHandleSlashCommand).toHaveBeenCalledWith(
+          btwQuery,
+          undefined,
+          undefined,
+          undefined,
+          expect.any(String),
+          expect.any(Function),
+          expect.any(AbortSignal),
+        );
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
         expect(mockSendMessageStream.mock.calls[1]?.[3]).toEqual(
           expect.objectContaining({

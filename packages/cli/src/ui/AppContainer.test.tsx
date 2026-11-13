@@ -3758,6 +3758,102 @@ describe('AppContainer State Management', () => {
       expect(mockQueueMessage).not.toHaveBeenCalled();
     });
 
+    it('submits an idle ?btw side question immediately instead of queueing it', () => {
+      const mockSubmitQuery = vi.fn();
+      const mockQueueMessage = vi.fn();
+
+      mockedUseLlmStream.mockReturnValue({
+        streamingState: 'idle',
+        submitQuery: mockSubmitQuery,
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+        cancelOngoingRequest: vi.fn(),
+        retryLastPrompt: vi.fn(),
+        streamingResponseLengthRef: { current: 0 },
+        isReceivingContent: false,
+      });
+      mockedUseMessageQueue.mockReturnValue({
+        removeGoalTurns: vi.fn().mockReturnValue([]),
+        messageQueue: [],
+        addMessage: mockQueueMessage,
+        clearQueue: vi.fn(),
+        getQueuedMessagesText: vi.fn().mockReturnValue(''),
+        popAllMessages: vi.fn().mockReturnValue(null),
+        drainQueue: vi.fn().mockReturnValue([]),
+        popNextTurn: vi.fn().mockReturnValue(null),
+      });
+
+      render(
+        <AppContainer
+          config={mockConfig}
+          settings={mockSettings}
+          version="1.0.0"
+          initializationResult={mockInitResult}
+        />,
+      );
+
+      capturedUIActions.handleFinalSubmit('?btw what is a closure', {
+        submittedPrompt: '?btw what is a closure',
+      });
+
+      expect(mockSubmitQuery).toHaveBeenCalledWith(
+        '?btw what is a closure',
+        SendMessageType.UserQuery,
+        undefined,
+        { submittedPrompt: '?btw what is a closure' },
+      );
+      expect(mockQueueMessage).not.toHaveBeenCalled();
+    });
+
+    it('still queues an idle question-mark prompt that is not ?btw', () => {
+      const mockSubmitQuery = vi.fn();
+      const mockQueueMessage = vi.fn();
+
+      mockedUseLlmStream.mockReturnValue({
+        streamingState: 'idle',
+        submitQuery: mockSubmitQuery,
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+        cancelOngoingRequest: vi.fn(),
+        retryLastPrompt: vi.fn(),
+        streamingResponseLengthRef: { current: 0 },
+        isReceivingContent: false,
+      });
+      mockedUseMessageQueue.mockReturnValue({
+        removeGoalTurns: vi.fn().mockReturnValue([]),
+        messageQueue: [],
+        addMessage: mockQueueMessage,
+        clearQueue: vi.fn(),
+        getQueuedMessagesText: vi.fn().mockReturnValue(''),
+        popAllMessages: vi.fn().mockReturnValue(null),
+        drainQueue: vi.fn().mockReturnValue([]),
+        popNextTurn: vi.fn().mockReturnValue(null),
+      });
+
+      render(
+        <AppContainer
+          config={mockConfig}
+          settings={mockSettings}
+          version="1.0.0"
+          initializationResult={mockInitResult}
+        />,
+      );
+
+      capturedUIActions.handleFinalSubmit('? what is a closure', {
+        submittedPrompt: '? what is a closure',
+      });
+
+      expect(mockSubmitQuery).not.toHaveBeenCalled();
+      expect(mockQueueMessage).toHaveBeenCalledWith(
+        '? what is a closure',
+        false,
+        '? what is a closure',
+        false,
+      );
+    });
+
     it('injects a recovered-agent reminder into the next ordinary prompt once', () => {
       const mockQueueMessage = vi.fn();
       vi.spyOn(mockConfig, 'consumePendingRecoveredAgentsNotice')
@@ -4308,6 +4404,69 @@ describe('AppContainer State Management', () => {
 
       expect(mockQueueMessage).toHaveBeenNthCalledWith(
         2,
+        '<system-reminder>\nThe resumed session ran in worktree /tmp/wt-1.\n' +
+          '</system-reminder>\n\ncontinue',
+        false,
+        'continue',
+        false,
+      );
+    });
+
+    it('does not prepend the worktree reminder onto an idle ?btw side question', async () => {
+      const mockSubmitQuery = vi.fn();
+      const mockQueueMessage = vi.fn();
+      vi.spyOn(
+        mockConfig,
+        'consumePendingStartupWorktreeNotice',
+      ).mockReturnValue('The resumed session ran in worktree /tmp/wt-1.');
+      mockedUseLlmStream.mockReturnValue({
+        streamingState: 'idle',
+        submitQuery: mockSubmitQuery,
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+        cancelOngoingRequest: vi.fn(),
+        retryLastPrompt: vi.fn(),
+        streamingResponseLengthRef: { current: 0 },
+        isReceivingContent: false,
+      });
+      mockedUseMessageQueue.mockReturnValue({
+        removeGoalTurns: vi.fn().mockReturnValue([]),
+        messageQueue: [],
+        addMessage: mockQueueMessage,
+        clearQueue: vi.fn(),
+        getQueuedMessagesText: vi.fn().mockReturnValue(''),
+        popAllMessages: vi.fn().mockReturnValue(null),
+        drainQueue: vi.fn().mockReturnValue([]),
+        popNextTurn: vi.fn().mockReturnValue(null),
+      });
+
+      render(
+        <AppContainer
+          config={mockConfig}
+          settings={mockSettings}
+          version="1.0.0"
+          initializationResult={mockInitResult}
+        />,
+      );
+      await flushConfigInitialization();
+
+      capturedUIActions.handleFinalSubmit('?btw what is a closure', {
+        submittedPrompt: '?btw what is a closure',
+      });
+
+      expect(mockSubmitQuery).toHaveBeenCalledWith(
+        '?btw what is a closure',
+        SendMessageType.UserQuery,
+        undefined,
+        { submittedPrompt: '?btw what is a closure' },
+      );
+      expect(mockQueueMessage).not.toHaveBeenCalled();
+
+      capturedUIActions.handleFinalSubmit('continue', {
+        submittedPrompt: 'continue',
+      });
+      expect(mockQueueMessage).toHaveBeenCalledWith(
         '<system-reminder>\nThe resumed session ran in worktree /tmp/wt-1.\n' +
           '</system-reminder>\n\ncontinue',
         false,
@@ -10263,6 +10422,20 @@ describe('AppContainer State Management', () => {
 
       capturedUIActions.handleFinalSubmit('/btw side note', {
         submittedPrompt: '/btw side note',
+      });
+      expect(announcementCalls(addItem)).toHaveLength(0);
+
+      capturedUIActions.handleFinalSubmit('hello', {
+        submittedPrompt: 'hello',
+      });
+      expect(announcementCalls(addItem)).toHaveLength(1);
+    });
+
+    it('does not consume the latch on a leading ?btw side question', () => {
+      const { addItem } = renderAnnouncementHarness(['QWEN.md']);
+
+      capturedUIActions.handleFinalSubmit('?btw side note', {
+        submittedPrompt: '?btw side note',
       });
       expect(announcementCalls(addItem)).toHaveLength(0);
 
