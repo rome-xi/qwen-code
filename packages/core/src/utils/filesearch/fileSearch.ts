@@ -153,23 +153,39 @@ class RecursiveFileSearch implements FileSearch {
     pattern = unescapePath(pattern) || '*';
 
     let filteredCandidates;
-    const { files: candidates, isExactMatch } =
-      await this.resultCache!.get(pattern);
+    const {
+      files: candidates,
+      isExactMatch,
+      limit: cachedLimit,
+    } = await this.resultCache!.get(pattern);
 
-    if (isExactMatch) {
+    // Pass a generous limit to the worker so results are trimmed before
+    // IPC serialization — avoids sending 50k+ entries across postMessage
+    // when only ~72 are displayed. The 200 cap leaves headroom for
+    // downstream ignore-filter to drop entries without starving results.
+    const fzf = this.fzf;
+    const useFuzzy = !pattern.includes('*') && fzf != null;
+    const fzfLimit = Math.max(200, (options.maxResults ?? 200) * 3);
+    // A batch that filled its fetch limit may be truncated. Reuse it only
+    // when this request does not need a larger bounded query.
+    const refreshTruncatedFuzzy =
+      isExactMatch &&
+      useFuzzy &&
+      cachedLimit !== undefined &&
+      candidates.length === cachedLimit &&
+      fzfLimit > cachedLimit;
+
+    if (isExactMatch && !refreshTruncatedFuzzy) {
       // Use the cached result.
       filteredCandidates = candidates;
     } else {
       let shouldCache = true;
-      if (pattern.includes('*') || !this.fzf) {
+      let fetchedLimit: number | undefined;
+      if (!fzf || !useFuzzy) {
         filteredCandidates = await filter(candidates, pattern, options.signal);
       } else {
-        // Pass a generous limit to the worker so results are trimmed before
-        // IPC serialization — avoids sending 50k+ entries across postMessage
-        // when only ~72 are displayed. The 200 cap leaves headroom for
-        // downstream ignore-filter to drop entries without starving results.
-        const fzfLimit = Math.max(200, (options.maxResults ?? 200) * 3);
-        filteredCandidates = await this.fzf
+        fetchedLimit = fzfLimit;
+        filteredCandidates = await fzf
           .find(pattern, fzfLimit)
           .then((results: Array<FzfResultItem<string>>) =>
             results.map((entry: FzfResultItem<string>) => entry.item),
@@ -181,7 +197,7 @@ class RecursiveFileSearch implements FileSearch {
       }
 
       if (shouldCache) {
-        this.resultCache!.set(pattern, filteredCandidates);
+        this.resultCache!.set(pattern, filteredCandidates, fetchedLimit);
       }
     }
 

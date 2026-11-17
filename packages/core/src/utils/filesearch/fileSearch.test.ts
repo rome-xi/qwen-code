@@ -356,6 +356,44 @@ describe('FileSearch', () => {
     expect(limitedResults).toEqual(['file1.js', 'file2.js']);
   });
 
+  describe('fuzzy candidate cache limits', () => {
+    const MATCH_COUNT = 450;
+
+    const sampleFiles = (): FileSystemStructure => {
+      const files: FileSystemStructure = {};
+      for (let i = 0; i < MATCH_COUNT; i++) {
+        files[`sample-${String(i).padStart(3, '0')}.txt`] = '';
+      }
+      return files;
+    };
+
+    it('refreshes a truncated fuzzy batch when maxResults grows', async () => {
+      const fileSearch = await init(sampleFiles());
+      const narrow = await fileSearch.search('sample', { maxResults: 1 });
+      expect(narrow).toHaveLength(1);
+
+      const widened = await fileSearch.search('sample', { maxResults: 400 });
+      expect(widened).toHaveLength(400);
+    });
+
+    it('reuses a larger fuzzy batch for a smaller maxResults', async () => {
+      const fileSearch = await init(sampleFiles());
+      const wide = await fileSearch.search('sample', { maxResults: 400 });
+      expect(wide).toHaveLength(400);
+
+      const narrow = await fileSearch.search('sample', { maxResults: 1 });
+      expect(narrow).toHaveLength(1);
+    });
+
+    it('reuses a fuzzy batch when the same maxResults is repeated', async () => {
+      const fileSearch = await init(sampleFiles());
+      const first = await fileSearch.search('sample', { maxResults: 400 });
+      const second = await fileSearch.search('sample', { maxResults: 400 });
+      expect(first).toHaveLength(400);
+      expect(second).toHaveLength(400);
+    });
+  });
+
   it.skipIf(process.platform === 'win32')(
     'should handle file paths with special characters that need escaping',
     async () => {

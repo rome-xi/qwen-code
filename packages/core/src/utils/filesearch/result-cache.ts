@@ -6,12 +6,21 @@
 
 import picomatch from 'picomatch';
 
+interface CachedBatch {
+  files: string[];
+  /**
+   * Fetch limit for a bounded fuzzy batch. `files.length === limit` means
+   * the batch may be truncated. Omitted for complete (glob/filter) results.
+   */
+  limit?: number;
+}
+
 /**
  * Implements an in-memory cache for file search results.
  * This cache optimizes subsequent searches by leveraging previously computed results.
  */
 export class ResultCache {
-  private readonly cache: Map<string, string[]>;
+  private readonly cache: Map<string, CachedBatch>;
   private hits = 0;
   private misses = 0;
 
@@ -26,14 +35,20 @@ export class ResultCache {
    * @returns An object containing the files to search and a boolean indicating
    *          if the result is an exact cache hit.
    */
-  async get(
-    query: string,
-  ): Promise<{ files: string[]; isExactMatch: boolean }> {
-    const isCacheHit = this.cache.has(query);
+  async get(query: string): Promise<{
+    files: string[];
+    isExactMatch: boolean;
+    limit?: number;
+  }> {
+    const cached = this.cache.get(query);
 
-    if (isCacheHit) {
+    if (cached) {
       this.hits++;
-      return { files: this.cache.get(query)!, isExactMatch: true };
+      return {
+        files: cached.files,
+        isExactMatch: true,
+        limit: cached.limit,
+      };
     }
 
     this.misses++;
@@ -58,7 +73,7 @@ export class ResultCache {
     }
 
     const filesToSearch = bestBaseQuery
-      ? this.cache.get(bestBaseQuery)!
+      ? this.cache.get(bestBaseQuery)!.files
       : this.allFiles;
 
     return { files: filesToSearch, isExactMatch: false };
@@ -68,9 +83,11 @@ export class ResultCache {
    * Stores search results in the cache.
    * @param query The search query pattern.
    * @param results The matching file paths to cache.
+   * @param limit Fetch limit for a bounded fuzzy batch. Omit when `results`
+   * is the complete match set.
    */
-  set(query: string, results: string[]): void {
-    this.cache.set(query, results);
+  set(query: string, results: string[], limit?: number): void {
+    this.cache.set(query, { files: results, limit });
   }
 }
 
